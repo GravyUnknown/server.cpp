@@ -1,46 +1,21 @@
-#undef UNICODE
+#include "Server.hpp"
 
-#define WIN32_LEAN_AND_MEAN
-
-#include <windows.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <iostream>
-#include <fstream>
-#include <istream>
-
-// Need to link with Ws2_32.lib
-#pragma comment (lib, "Ws2_32.lib")
-// #pragma comment (lib, "Mswsock.lib")
-
-#define DEFAULT_BUFLEN 512
-#define DEFAULT_PORT "27015"
-
-
-int main()
+void Server::resultMessage(std::string function, int result)
 {
-	WSADATA wsadata;
-	int iResult;
-
-	SOCKET server = INVALID_SOCKET;
-	SOCKET client = INVALID_SOCKET;
-
-	char buf[DEFAULT_BUFLEN];
-	int buflen = DEFAULT_BUFLEN;
-	std::ifstream stream("index.html");
-
-	struct addrinfo* result = NULL;
-	struct addrinfo hints;
-
-	if (WSAStartup((2, 2), &wsadata) != 0)
+	if (result == SOCKET_ERROR)
 	{
-		std::cout << "failed to launch wsa " << WSAGetLastError();
+		std::cout << function << "failed with " << WSAGetLastError() << std::endl;
 		WSACleanup();
-		return 1;
 	}
-
+	else { std::cout << function << " succeeded" << std::endl; }
+}
+Server::Server()
+{
+	iResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
+	if (iResult != 0)
+	{
+		std::cout << "Error with WSAStartup " << WSAGetLastError() << std::endl;
+	}
 
 	ZeroMemory(&hints, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -48,83 +23,76 @@ int main()
 	hints.ai_protocol = IPPROTO_TCP;
 	hints.ai_flags = AI_PASSIVE;
 
-	if (getaddrinfo(NULL, DEFAULT_PORT, &hints, &result) != 0)
+	iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+	if (iResult != 0 )
 	{
-		std::cout << "getaddrinfo failed with " << WSAGetLastError();
+		std::cout << "Error with getaddrinfo" << WSAGetLastError() << std::endl;
 		WSACleanup();
-		return 1;
+		return;
 	}
 
-	server = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	if (server == INVALID_SOCKET)
+	server_socket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+	if (server_socket == INVALID_SOCKET)
 	{
-
-		std::cout << "failed to launch socket" << WSAGetLastError();
+		std::cout << "Socket failed with " << WSAGetLastError() << std::endl;
 		WSACleanup();
-		return 1;
+		return;
+
 	}
 
-	if (bind(server, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) 
-	{
-		std::cout << "Binding failed " << WSAGetLastError();
-		freeaddrinfo(result);
-		WSACleanup();
-		return 1;
-	}
+	iResult = bind(server_socket, result->ai_addr, (int)result->ai_addrlen);
+	resultMessage("bind", iResult);
 
 	freeaddrinfo(result);
 
-
-	if (listen(server, SOMAXCONN) == INVALID_SOCKET)
-	{
-		std::cout << "Listening failed " << WSAGetLastError();
-		closesocket(server);
-		WSACleanup();
-		return 1;
-	}
-	
-	client = accept(server, NULL, NULL);
-	if (client == SOCKET_ERROR)
-	{
-		std::cout << "Client failed to accept " << WSAGetLastError();
-		closesocket(server);
-		WSACleanup();
-		return 1;
-	}
-
-
-	do
-	{
-		iResult = recv(client, buf, buflen, 0);
-		stream.seekg(0, std::ios::end);
-		int length = stream.tellg();
-		stream.seekg(0, std::ios::beg);
-
-		stream.read(buf, length);
-
-		if (send(client, buf, length, 0) == SOCKET_ERROR)
-		{
-			std::cout << "Send failed " << WSAGetLastError();
-			closesocket(server);
-			WSACleanup();
-			return 1;
-		}
-
-
-	} while (iResult > 0);
-
-
-	if (shutdown(client, SD_SEND) == SOCKET_ERROR)
-	{
-		std::cout << "Shutdown failed " << WSAGetLastError();
-		closesocket(client);
-		WSACleanup();
-		return 1;
-	}
-
-
-	closesocket(client);
-	WSACleanup();
-
+	iResult = listen(server_socket, SOMAXCONN);
+	resultMessage("listen", iResult);
+	acceptConnetion(server_socket, client_socket);
 
 }
+
+SOCKET Server::acceptConnetion(SOCKET serverSocket, SOCKET clientSocket)
+{
+
+	clientSocket = accept(serverSocket, NULL, NULL);
+	resultMessage("clientsocket", clientSocket);
+
+	closesocket(server_socket);
+
+	receive(clientSocket);
+
+	return 0;
+
+}
+
+SOCKET Server::receive(SOCKET clientSocket)
+{
+	do
+	{
+		bytesReceived = recv(clientSocket, recvBuf, recvBufLen, 0);
+		resultMessage("recv", iResult);
+
+		std::cout << recvBuf << std::endl;
+
+
+
+		if (bytesReceived > 0)
+		{
+			std::cout << "Bytes received " << bytesReceived << std::endl;
+
+			int iSendResult = send(clientSocket, recvBuf, bytesReceived, 0);
+			resultMessage("send ", iSendResult);
+		}
+
+		else if (bytesReceived <= 0)
+		{
+			std::cout << "Connection closed or error " << WSAGetLastError() << std::endl;
+		}
+	} while (bytesReceived > 0);
+
+	shutdown(clientSocket, SD_SEND);
+	closesocket(clientSocket);
+	WSACleanup();
+	return 0;
+}
+
