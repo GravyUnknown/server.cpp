@@ -3,12 +3,18 @@
 #define WIN32_LEAN_AND_MEAN
 
 #include <vector>
+#include <istream>
+#include <fstream>
+#include <string>
+#include <sstream>
+#include <algorithm>
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+
 
 // Need to link with Ws2_32.lib
 #pragma comment (lib, "Ws2_32.lib")
@@ -27,9 +33,11 @@ private:
 	int bytesReceived;
 	char recvBuf[DEFAULT_BUFLEN];
 	int recvBufLen = DEFAULT_BUFLEN;
-	struct addrinfo* result=NULL;
+	struct addrinfo* result = NULL;
 	struct addrinfo hints;
 	struct addrinfo* p;
+	bool keepAlive;
+
 
 public:
 	Server();
@@ -37,6 +45,7 @@ public:
 	SOCKET receive(SOCKET clientSocket);
 	void resultMessage(std::string error, int result);
 	std::vector<char> readContents(std::string filename);
+	std::string parseRequest(std::string recvBuf);
 
 
 };

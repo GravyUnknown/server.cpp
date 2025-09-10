@@ -96,3 +96,58 @@ SOCKET Server::receive(SOCKET clientSocket)
 	return 0;
 }
 
+
+std::vector<char> Server::readContents(std::string filename)
+{
+	std::ifstream file(filename, std::ios::binary | std::ios::ate);
+	if (!file.is_open())
+	{
+		std::cerr << "Cannot open file " << filename << std::endl;
+	}
+
+	std::streamsize size = file.tellg();
+	file.seekg(0, std::ios::beg);
+
+	std::vector<char> buffer(size);
+
+	if (!file.read(buffer.data(), size))
+	{
+		std::cerr << "Cannot read " << filename << std::endl;
+	}
+
+	return buffer;
+
+
+
+}
+
+std::string Server::parseRequest(std::string recvBuf)
+{
+
+	std::istringstream buf(recvBuf);
+	std::string line;
+
+	while (std::getline(buf, line)) {
+
+		std::transform(line.begin(), line.end(), line.begin(), ::tolower);
+		if (line.find("connection: keep-alive") != std::string::npos)
+		{
+			keepAlive = true;
+			
+			break;
+		}
+
+		if (line.find("get: /") != std::string::npos)
+		{
+			return "/";
+		}
+		else if (line.find("get: /about") != std::string::npos)
+		{
+			return "/about";
+		}
+
+
+		return "";
+
+
+	}

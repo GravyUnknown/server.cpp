@@ -29,7 +29,7 @@
     <None Include="index.html" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Server.h">
+    <ClInclude Include="Server.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
