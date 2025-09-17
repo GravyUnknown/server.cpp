@@ -361,3 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/stupidserver_test
+/Server.cpp.sln
+/stupidserver.sln
+/.gitignore
+/.gitignore

@@ -1,54 +1,34 @@
 #include "Server.hpp"
 
-void Server::resultMessage(std::string function, int result)
+bool Server::resultMessage(const std::string& function, int result)
 {
-	if (result == SOCKET_ERROR)
+	if (result == SOCKET_ERROR || result == INVALID_SOCKET)
 	{
-		std::cout << function << "failed with " << WSAGetLastError() << std::endl;
-		WSACleanup();
+		const std::string& errorMessage = function + "failed with: " + std::to_string(WSAGetLastError());
+		throw std::runtime_error(errorMessage);
+		return false;
+
 	}
-	else { std::cout << function << " succeeded" << std::endl; }
+	else {
+		std::cout << function << " succeeded" << std::endl;
+		return true;
+	}
 }
+
 Server::Server()
 {
-	iResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
-	if (iResult != 0)
-	{
-		std::cout << "Error with WSAStartup " << WSAGetLastError() << std::endl;
+	try {
+		initializeWinsock();
+		setupServer();
 	}
-
-	ZeroMemory(&hints, sizeof(hints));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_protocol = IPPROTO_TCP;
-	hints.ai_flags = AI_PASSIVE;
-
-	iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-	if (iResult != 0 )
-	{
-		std::cout << "Error with getaddrinfo" << WSAGetLastError() << std::endl;
-		WSACleanup();
-		return;
+	catch (const std::exception& e) {
+		std::cout << e.what() << std::endl;
 	}
+}
 
-	server_socket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-	if (server_socket == INVALID_SOCKET)
-	{
-		std::cout << "Socket failed with " << WSAGetLastError() << std::endl;
-		WSACleanup();
-		return;
-
-	}
-
-	iResult = bind(server_socket, result->ai_addr, (int)result->ai_addrlen);
-	resultMessage("bind", iResult);
-
-	freeaddrinfo(result);
-
-	iResult = listen(server_socket, SOMAXCONN);
-	resultMessage("listen", iResult);
-	acceptConnetion(server_socket, client_socket);
-
+Server::~Server()
+{
+	WSACleanup();
 }
 
 SOCKET Server::acceptConnetion(SOCKET serverSocket, SOCKET clientSocket)
@@ -57,7 +37,7 @@ SOCKET Server::acceptConnetion(SOCKET serverSocket, SOCKET clientSocket)
 	clientSocket = accept(serverSocket, NULL, NULL);
 	resultMessage("clientsocket", clientSocket);
 
-	closesocket(server_socket);
+	closesocket(m_ServerSocket);
 
 	receive(clientSocket);
 
@@ -67,87 +47,151 @@ SOCKET Server::acceptConnetion(SOCKET serverSocket, SOCKET clientSocket)
 
 SOCKET Server::receive(SOCKET clientSocket)
 {
-	do
-	{
-		bytesReceived = recv(clientSocket, recvBuf, recvBufLen, 0);
-		resultMessage("recv", iResult);
 
-		std::cout << recvBuf << std::endl;
-
-
-
-		if (bytesReceived > 0)
-		{
-			std::cout << "Bytes received " << bytesReceived << std::endl;
-
-			int iSendResult = send(clientSocket, recvBuf, bytesReceived, 0);
-			resultMessage("send ", iSendResult);
-		}
-
-		else if (bytesReceived <= 0)
-		{
-			std::cout << "Connection closed or error " << WSAGetLastError() << std::endl;
-		}
-	} while (bytesReceived > 0);
-
+	bytesReceived = recv(clientSocket, recvBuf, recvBufLen, 0);
+	std::cout << bytesReceived << '\n';
+	std::cout << recvBuf << std::endl;
+	resultMessage("recv", bytesReceived);
+	int iSendResult = send(clientSocket, recvBuf, recvBufLen, 0);
+	resultMessage("send", iSendResult);
 	shutdown(clientSocket, SD_SEND);
 	closesocket(clientSocket);
-	WSACleanup();
+	
 	return 0;
 }
 
 
-std::vector<char> Server::readContents(std::string filename)
+std::string& Server::readContents(const std::string& filename)
 {
-	std::ifstream file(filename, std::ios::binary | std::ios::ate);
-	if (!file.is_open())
-	{
-		std::cerr << "Cannot open file " << filename << std::endl;
-	}
+	std::ifstream file(filename.c_str());
+	std::stringstream buffer;
 
-	std::streamsize size = file.tellg();
-	file.seekg(0, std::ios::beg);
+	buffer << file.rdbuf();
+	m_Buffer = buffer.str();
 
-	std::vector<char> buffer(size);
+	return m_Buffer;
 
-	if (!file.read(buffer.data(), size))
-	{
-		std::cerr << "Cannot read " << filename << std::endl;
-	}
-
-	return buffer;
 
 
 
 }
 
-std::string Server::parseRequest(std::string recvBuf)
+const std::string_view Server::s_ParseRequest(const std::string& recvBuf)
 {
 
 	std::istringstream buf(recvBuf);
 	std::string line;
 
-	while (std::getline(buf, line)) {
-
-		std::transform(line.begin(), line.end(), line.begin(), ::tolower);
-		if (line.find("connection: keep-alive") != std::string::npos)
-		{
-			keepAlive = true;
-			
-			break;
-		}
-
-		if (line.find("get: /") != std::string::npos)
-		{
-			return "/";
-		}
-		else if (line.find("get: /about") != std::string::npos)
+	while (std::getline(buf, line)) 
+	{
+		if (line.find("/about") != std::string::npos)
 		{
 			return "/about";
 		}
+		else
+		{
+			return "/";
+		}
+	}
 
 
-		return "";
+}
 
+const bool Server::keepConnectionAlive(bool keepAlive)
+{
+	return keepAlive;
+}
+
+
+void Server::sendMessage(SOCKET clientSocket)
+{
+
+
+	do
+	{
+		bytesReceived = recv(clientSocket, recvBuf, sizeof(recvBuf), 0);
+		resultMessage("recv", bytesReceived);
+		std::cout << recvBuf << std::endl;
+		std::cout << s_ParseRequest(recvBuf) << std::endl;
+		const std::string& respondMessage =
+			"HTTP/1.1 200 OK \r\n"
+			"CONTENT-TYPE: text/html \r\n"
+			"CONTENT-LENGTH: " + std::to_string(m_Buffer.size()) + "\r\n"
+			"Connection: keep-alive \r\n"
+			"Keep-Alive: timeout=100\r\n"
+			"\r\n" + m_Buffer;
+
+
+
+
+
+		int	iSendResult = send(clientSocket, respondMessage.c_str(), respondMessage.size(), 0);
+		resultMessage("html file send", iSendResult);
+
+		if (bytesReceived <= 0)
+		{
+			keepConnectionAlive(false);
+			std::cout << "Connection close or other error\n";
+		}
+	} while (keepConnectionAlive());
+
+
+
+
+
+}
+
+void Server::initializeWinsock()
+{
+
+	iResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
+	if (iResult != 0)
+	{
+		throw std::runtime_error("WSAStartup failed " + std::to_string(WSAGetLastError()));
+	}
+}
+
+void Server::setupServer()
+{
+
+	ZeroMemory(&hints, sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+	hints.ai_flags = AI_PASSIVE;
+
+	iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+	if (iResult != 0)
+	{
+		throw std::runtime_error("getaddrinfo failed with " + std::to_string(WSAGetLastError()));
+		return;
+	}
+
+	m_ServerSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+	if (m_ServerSocket == INVALID_SOCKET)
+	{
+		throw std::runtime_error("creating socket failed with " + std::to_string(WSAGetLastError()));
+
+		return;
 
 	}
+
+	iResult = bind(m_ServerSocket, result->ai_addr, (int)result->ai_addrlen);
+	resultMessage("bind", iResult);
+
+	freeaddrinfo(result);
+	result = nullptr;
+
+	iResult = listen(m_ServerSocket, SOMAXCONN);
+	resultMessage("listen", iResult);
+
+	m_ClientSocket = accept(m_ServerSocket, NULL, NULL);
+	resultMessage("accept", m_ClientSocket);
+	readContents("index.html");
+	std::cout << "Buffer: " << m_Buffer << std::endl;
+	sendMessage(m_ClientSocket);
+
+	shutdown(m_ClientSocket, SD_SEND);
+	closesocket(m_ClientSocket);
+
+}

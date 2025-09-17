@@ -2,6 +2,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 
+#include <array>
 #include <vector>
 #include <istream>
 #include <fstream>
@@ -27,8 +28,10 @@ class Server
 {
 private:
 	WSADATA wsadata;
-	SOCKET server_socket = INVALID_SOCKET;
-	SOCKET client_socket = INVALID_SOCKET;
+	SOCKET m_ServerSocket = INVALID_SOCKET;
+	SOCKET m_ClientSocket = INVALID_SOCKET;
+	std::string m_Buffer;
+	std::string m_RecvBuf;
 	int iResult;
 	int bytesReceived;
 	char recvBuf[DEFAULT_BUFLEN];
@@ -36,16 +39,20 @@ private:
 	struct addrinfo* result = NULL;
 	struct addrinfo hints;
 	struct addrinfo* p;
-	bool keepAlive;
 
 
 public:
 	Server();
+	~Server();
+	static const bool keepConnectionAlive(bool keepalive=false);
 	SOCKET acceptConnetion(SOCKET serverSocket, SOCKET clientSocket);
 	SOCKET receive(SOCKET clientSocket);
-	void resultMessage(std::string error, int result);
-	std::vector<char> readContents(std::string filename);
-	std::string parseRequest(std::string recvBuf);
+	bool resultMessage(const std::string& error, int result);
+	std::string& readContents(const std::string& filename);
+	static const std::string_view s_ParseRequest(const std::string& recvBuf);
+	void sendMessage(SOCKET clientSocket) ;
+	void initializeWinsock();
+	void setupServer();
 
 
 };
