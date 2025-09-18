@@ -3,4 +3,6 @@
 int main()
 {
 	Server server;
+	server.initializeWinsock();
+	server.setupServer();
 }

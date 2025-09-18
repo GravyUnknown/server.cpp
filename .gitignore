@@ -366,3 +366,5 @@ FodyWeavers.xsd
 /stupidserver.sln
 /.gitignore
 /.gitignore
+/stupidserver/stupidserver.vcxproj
+/stupidserver/stupidserver.vcxproj.filters

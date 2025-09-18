@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+#include <chrono>
+#include <map>
 
 
 // Need to link with Ws2_32.lib
@@ -31,26 +33,21 @@ private:
 	SOCKET m_ServerSocket = INVALID_SOCKET;
 	SOCKET m_ClientSocket = INVALID_SOCKET;
 	std::string m_Buffer;
-	std::string m_RecvBuf;
-	int iResult;
-	int bytesReceived;
-	char recvBuf[DEFAULT_BUFLEN];
-	int recvBufLen = DEFAULT_BUFLEN;
+	int m_iResult;
+	int m_BytesReceived;
+	DWORD timeout = 10 * 1000;
+	char m_RecvBuf[DEFAULT_BUFLEN];
 	struct addrinfo* result = NULL;
 	struct addrinfo hints;
 	struct addrinfo* p;
 
 
 public:
-	Server();
 	~Server();
-	static const bool keepConnectionAlive(bool keepalive=false);
-	SOCKET acceptConnetion(SOCKET serverSocket, SOCKET clientSocket);
-	SOCKET receive(SOCKET clientSocket);
 	bool resultMessage(const std::string& error, int result);
-	std::string& readContents(const std::string& filename);
-	static const std::string_view s_ParseRequest(const std::string& recvBuf);
-	void sendMessage(SOCKET clientSocket) ;
+	std::string readContents(const std::string& filename);
+	std::string s_ParseRequest(const std::string& recvBuf);
+	int sendMessage(SOCKET clientSocket) ;
 	void initializeWinsock();
 	void setupServer();
 
