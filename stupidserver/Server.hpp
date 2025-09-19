@@ -35,7 +35,6 @@ private:
 	std::string m_Buffer;
 	int m_iResult;
 	int m_BytesReceived;
-	DWORD timeout = 10 * 1000;
 	char m_RecvBuf[DEFAULT_BUFLEN];
 	struct addrinfo* result = NULL;
 	struct addrinfo hints;

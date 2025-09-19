@@ -53,13 +53,7 @@ std::string Server::s_ParseRequest(const std::string& recvBuf)
 int Server::sendMessage(SOCKET clientSocket)
 {
 
-	setsockopt(m_ClientSocket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-	m_BytesReceived = recv(m_ClientSocket, m_RecvBuf, sizeof(m_RecvBuf), 0);
-	if (m_BytesReceived == SOCKET_ERROR)
-	{
-		std::cout << "Timed out \n";
-		return -1;
-	}
+	recv(m_ClientSocket, m_RecvBuf, sizeof(m_RecvBuf), 0);
 	readContents(s_ParseRequest(m_RecvBuf));
 
 
@@ -67,14 +61,14 @@ int Server::sendMessage(SOCKET clientSocket)
 		"HTTP/1.1 200 OK \r\n"
 		"CONTENT-TYPE: text/html \r\n"
 		"CONTENT-LENGTH: " + std::to_string(m_Buffer.size()) + "\r\n"
-		"Keep-Alive: timeout=10\r\n"
 		"\r\n" + m_Buffer;
 
 
 
 
 
-	m_iResult = send(clientSocket, respondMessage.c_str(), respondMessage.size(), 0);
+
+	send(clientSocket, respondMessage.c_str(), respondMessage.size(), 0);
 	return 1;
 
 
@@ -132,14 +126,9 @@ void Server::setupServer()
 		{
 			continue;
 		}
-		//resultMessage("accept", m_ClientSocket);
-		//readContents("index.html");
-		//std::cout << "Buffer: " << m_Buffer << std::endl;
-		 m_iResult = sendMessage(m_ClientSocket);
-		if (m_iResult == -1)
-		{
-			break;
-		}
+	
+
+		sendMessage(m_ClientSocket);
 	}
 
 	shutdown(m_ClientSocket, SD_SEND);
