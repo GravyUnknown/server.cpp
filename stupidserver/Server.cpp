@@ -29,7 +29,7 @@ std::string Server::readContents(const std::string &filename) {
 Server::ReturnStatus Server::s_ParseRequest(const std::string &recvBuf) {
   std::istringstream buf(recvBuf);
   std::string method, route, version;
-  static std::map<std::string, std::string> routes{{"/", "index.html"},
+  static std::map<std::string, std::string> routes{{"/", "about.html"},
                                                    {"/about", "about.html"}};
 
   if (!(buf >> method >> route >> version))
@@ -47,25 +47,40 @@ int Server::sendMessage(SOCKET clientSocket) {
 
   recv(m_ClientSocket, m_RecvBuf, sizeof(m_RecvBuf), 0);
   std::cout << m_RecvBuf << std::endl;
-  static const std::string errInvalid =
+  std::string body;
+  static const std::string &successHeader = "HTTP/1.1 200 OK\r\n"
+                                            "CONTENT-TYPE: text/html \r\n"
+                                            "Connection: close \r\n"
+                                            "CONTENT-LENGTH: ";
+  static const std::string &errInvalid =
       "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nError: "
       "Invalid format";
-  static const std::string errMethod =
+  static const std::string &errMethod =
       "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: "
       "text/plain\r\n\r\nError: Use GET";
-  static const std::string err404 = "HTTP/1.1 404 Not Found\r\nContent-Type: "
-                                    "text/plain\r\n\r\nError: Path not found";
-  Server::ReturnStatus ParsingResult = s_ParseRequest(m_RecvBuf);
+  static const std::string &err404 = "HTTP/1.1 404 Not Found\r\n"
+                                     "CONTENT-TYPE:text/plain "
+                                     "\r\n\r\n"
+                                     "Error: Path not found";
+  Server::ReturnStatus parsingResult = s_ParseRequest(m_RecvBuf);
 
-  const std::string &respondMessage = "HTTP/1.1 200 OK \r\n"
-                                      "CONTENT-TYPE: text/html \r\n"
-                                      "CONTENT-LENGTH: " +
-                                      std::to_string(m_Buffer.size()) +
-                                      "\r\n"
-                                      "\r\n" +
-                                      m_Buffer;
+  switch (parsingResult.returnCode) {
+  case Status::ERR_BADREQUEST:
+    m_Buffer = errInvalid;
+    break;
+  case Status::ERR_INVALIDMETHOD:
+    m_Buffer = errMethod;
+    break;
+  case Status::ERR_NOTFOUND:
+    m_Buffer = err404;
+    break;
+  case Status::OK:
+    body = readContents(parsingResult.route);
+    m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" + body;
+    break;
+  }
 
-  send(clientSocket, respondMessage.c_str(), respondMessage.size(), 0);
+  send(clientSocket, m_Buffer.c_str(), m_Buffer.size(), 0);
   return 1;
 }
 
