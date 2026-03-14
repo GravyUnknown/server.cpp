@@ -30,7 +30,7 @@ std::string Server::readContents(const std::string &filename) {
 Server::ReturnStatus Server::s_ParseRequest(const std::string &recvBuf) {
   std::istringstream buf(recvBuf);
   std::string method, route, version;
-  static std::map<std::string, std::string> routes{{"/", "about.html"},
+  static std::map<std::string, std::string> routes{{"/", "index.html"},
                                                    {"/about", "about.html"}};
 
   if (!(buf >> method >> route >> version))
