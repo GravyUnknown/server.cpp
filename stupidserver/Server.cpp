@@ -19,11 +19,12 @@ Server::~Server() { WSACleanup(); }
 
 std::string Server::readContents(const std::string &filename) {
   std::ifstream file(filename, std::ios::binary);
-  if (!(file.good())) {
-    return "File does not exist or other related reasons";
-  }
-  return std::string((std::istreambuf_iterator<char>(file)),
-                     std::istreambuf_iterator<char>());
+  if (!(file.is_open()))
+    std::cerr << "File not found" << std::endl;
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+  m_Buffer = buffer.str();
+  return m_Buffer;
 }
 
 Server::ReturnStatus Server::s_ParseRequest(const std::string &recvBuf) {
