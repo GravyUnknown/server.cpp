@@ -2,8 +2,6 @@
 
 #define WIN32_LEAN_AND_MEAN
 
-#include <algorithm>
-#include <array>
 #include <fstream>
 #include <iostream>
 #include <istream>
@@ -12,10 +10,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
-#include <vector>
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#undef SendMessage
 
 // Need to link with Ws2_32.lib
 #pragma comment(lib, "Ws2_32.lib")
@@ -47,7 +45,7 @@ public:
   bool ResultMessage(const std::string &error, int result);
   std::string ReadContents(const std::string &filename);
   ReturnStatus ParseRequest(const std::string &recvBuf);
-  int SendMessageSocket();
+  int SendMessage();
   void InitializeWinsock();
   void SetupServer();
 };

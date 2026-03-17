@@ -1,11 +1,12 @@
 #include "Server.hpp"
 #include <fstream>
 #include <string>
+#include <winsock2.h>
 #include <ws2tcpip.h>
 
 bool Server::ResultMessage(const std::string &function, int result) {
   if (result == SOCKET_ERROR || result == INVALID_SOCKET) {
-    const std::string &errorMessage =
+    const std::string errorMessage =
         function + "failed with: " + std::to_string(WSAGetLastError());
     throw std::runtime_error(errorMessage);
     return false;
@@ -45,9 +46,23 @@ Server::ReturnStatus Server::ParseRequest(const std::string &recvBuf) {
              : Server::ReturnStatus{Status::ERR_NOTFOUND, " "};
 }
 
-int Server::SendMessageSocket() {
+int Server::SendMessage() {
 
-  recv(mClientSocket, mRecvBuf, sizeof(mRecvBuf), 0);
+  std::string fullRequest;
+  fullRequest.reserve(1024);
+  Server::ReturnStatus parsingResult;
+  while (true) {
+    mBytesReceived = recv(mClientSocket, mRecvBuf, sizeof(mRecvBuf) - 1, 0);
+
+    mRecvBuf[mBytesReceived] = '\0';
+    fullRequest.append(mRecvBuf);
+
+    if (fullRequest.find("\r\n\r\n") != std::string::npos) {
+      break;
+    }
+    std::cout << fullRequest << std::endl;
+  }
+
   std::string body;
   static const std::string &successHeader = "HTTP/1.1 200 OK\r\n"
                                             "CONTENT-TYPE: text/html \r\n"
@@ -63,7 +78,7 @@ int Server::SendMessageSocket() {
                                      "CONTENT-TYPE:text/plain "
                                      "\r\n\r\n"
                                      "Error: Path not found";
-  Server::ReturnStatus parsingResult = ParseRequest(mRecvBuf);
+  parsingResult = ParseRequest(fullRequest);
 
   switch (parsingResult.returnCode) {
   case Status::ERR_BADREQUEST:
@@ -79,7 +94,7 @@ int Server::SendMessageSocket() {
     body = ReadContents(parsingResult.route);
     // m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" +
     // body;
-    mBuffer = successHeader + std::to_string(body.size()) + "\r\n\r\n";
+    mBuffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" + body;
     break;
   }
 
@@ -91,8 +106,7 @@ void Server::InitializeWinsock() {
 
   mIResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
   if (mIResult != 0) {
-    throw std::runtime_error("WSAStartup failed " +
-                             std::to_string(WSAGetLastError()));
+    std::cerr << "Startup failed: " << WSAGetLastError() << std::endl;
   }
 }
 
@@ -106,8 +120,7 @@ void Server::SetupServer() {
 
   mIResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
   if (mIResult != 0) {
-    throw std::runtime_error("getaddrinfo failed with " +
-                             std::to_string(WSAGetLastError()));
+    std::cerr << "getaddrinfo failed: " << WSAGetLastError() << std::endl;
     return;
   }
 
@@ -137,7 +150,7 @@ void Server::SetupServer() {
       continue;
     }
 
-    SendMessageSocket();
+    SendMessage();
 
     shutdown(mClientSocket, SD_SEND);
     closesocket(mClientSocket);
