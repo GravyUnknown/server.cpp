@@ -2,6 +2,6 @@
 
 int main() {
   Server server;
-  server.initializeWinsock();
-  server.setupServer();
+  server.InitializeWinsock();
+  server.SetupServer();
 }

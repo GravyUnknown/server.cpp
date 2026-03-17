@@ -27,12 +27,12 @@
 class Server {
 private:
   WSADATA wsadata;
-  SOCKET m_ServerSocket = INVALID_SOCKET;
-  SOCKET m_ClientSocket = INVALID_SOCKET;
-  std::string m_Buffer;
-  int m_iResult;
-  int m_BytesReceived;
-  char m_RecvBuf[DEFAULT_BUFLEN];
+  SOCKET mServerSocket = INVALID_SOCKET;
+  SOCKET mClientSocket = INVALID_SOCKET;
+  std::string mBuffer;
+  int mIResult;
+  int mBytesReceived;
+  char mRecvBuf[DEFAULT_BUFLEN];
   struct addrinfo *result = NULL;
   struct addrinfo hints;
   struct addrinfo *p;
@@ -44,10 +44,10 @@ private:
 
 public:
   ~Server();
-  bool resultMessage(const std::string &error, int result);
-  std::string readContents(const std::string &filename);
-  ReturnStatus s_ParseRequest(const std::string &recvBuf);
-  int sendMessage(SOCKET clientSocket);
-  void initializeWinsock();
-  void setupServer();
+  bool ResultMessage(const std::string &error, int result);
+  std::string ReadContents(const std::string &filename);
+  ReturnStatus ParseRequest(const std::string &recvBuf);
+  int SendMessageSocket();
+  void InitializeWinsock();
+  void SetupServer();
 };

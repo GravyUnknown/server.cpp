@@ -1,8 +1,9 @@
 #include "Server.hpp"
+#include <fstream>
 #include <string>
 #include <ws2tcpip.h>
 
-bool Server::resultMessage(const std::string &function, int result) {
+bool Server::ResultMessage(const std::string &function, int result) {
   if (result == SOCKET_ERROR || result == INVALID_SOCKET) {
     const std::string &errorMessage =
         function + "failed with: " + std::to_string(WSAGetLastError());
@@ -17,17 +18,17 @@ bool Server::resultMessage(const std::string &function, int result) {
 
 Server::~Server() { WSACleanup(); }
 
-std::string Server::readContents(const std::string &filename) {
+std::string Server::ReadContents(const std::string &filename) {
   std::ifstream file(filename, std::ios::binary);
   if (!(file.is_open()))
     std::cerr << "File not found" << std::endl;
   std::stringstream buffer;
   buffer << file.rdbuf();
-  m_Buffer = buffer.str();
-  return m_Buffer;
+  mBuffer = buffer.str();
+  return mBuffer;
 }
 
-Server::ReturnStatus Server::s_ParseRequest(const std::string &recvBuf) {
+Server::ReturnStatus Server::ParseRequest(const std::string &recvBuf) {
   std::istringstream buf(recvBuf);
   std::string method, route, version;
   static std::map<std::string, std::string> routes{{"/", "index.html"},
@@ -44,10 +45,9 @@ Server::ReturnStatus Server::s_ParseRequest(const std::string &recvBuf) {
              : Server::ReturnStatus{Status::ERR_NOTFOUND, " "};
 }
 
-int Server::sendMessage(SOCKET clientSocket) {
+int Server::SendMessageSocket() {
 
-  recv(m_ClientSocket, m_RecvBuf, sizeof(m_RecvBuf), 0);
-  std::cout << m_RecvBuf << std::endl;
+  recv(mClientSocket, mRecvBuf, sizeof(mRecvBuf), 0);
   std::string body;
   static const std::string &successHeader = "HTTP/1.1 200 OK\r\n"
                                             "CONTENT-TYPE: text/html \r\n"
@@ -63,38 +63,40 @@ int Server::sendMessage(SOCKET clientSocket) {
                                      "CONTENT-TYPE:text/plain "
                                      "\r\n\r\n"
                                      "Error: Path not found";
-  Server::ReturnStatus parsingResult = s_ParseRequest(m_RecvBuf);
+  Server::ReturnStatus parsingResult = ParseRequest(mRecvBuf);
 
   switch (parsingResult.returnCode) {
   case Status::ERR_BADREQUEST:
-    m_Buffer = errInvalid;
+    mBuffer = errInvalid;
     break;
   case Status::ERR_INVALIDMETHOD:
-    m_Buffer = errMethod;
+    mBuffer = errMethod;
     break;
   case Status::ERR_NOTFOUND:
-    m_Buffer = err404;
+    mBuffer = err404;
     break;
   case Status::OK:
-    body = readContents(parsingResult.route);
-    m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" + body;
+    body = ReadContents(parsingResult.route);
+    // m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" +
+    // body;
+    mBuffer = successHeader + std::to_string(body.size()) + "\r\n\r\n";
     break;
   }
 
-  send(clientSocket, m_Buffer.c_str(), m_Buffer.size(), 0);
+  send(mClientSocket, mBuffer.c_str(), mBuffer.size(), 0);
   return 1;
 }
 
-void Server::initializeWinsock() {
+void Server::InitializeWinsock() {
 
-  m_iResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
-  if (m_iResult != 0) {
+  mIResult = WSAStartup(MAKEWORD(2, 2), &wsadata);
+  if (mIResult != 0) {
     throw std::runtime_error("WSAStartup failed " +
                              std::to_string(WSAGetLastError()));
   }
 }
 
-void Server::setupServer() {
+void Server::SetupServer() {
 
   ZeroMemory(&hints, sizeof(hints));
   hints.ai_family = AF_INET;
@@ -102,42 +104,42 @@ void Server::setupServer() {
   hints.ai_protocol = IPPROTO_TCP;
   hints.ai_flags = AI_PASSIVE;
 
-  m_iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-  if (m_iResult != 0) {
+  mIResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+  if (mIResult != 0) {
     throw std::runtime_error("getaddrinfo failed with " +
                              std::to_string(WSAGetLastError()));
     return;
   }
 
-  m_ServerSocket =
+  mServerSocket =
       socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-  if (m_ServerSocket == INVALID_SOCKET) {
+  if (mServerSocket == INVALID_SOCKET) {
     throw std::runtime_error("creating socket failed with " +
                              std::to_string(WSAGetLastError()));
 
     freeaddrinfo(result);
   }
 
-  m_iResult = bind(m_ServerSocket, result->ai_addr, (int)result->ai_addrlen);
+  mIResult = bind(mServerSocket, result->ai_addr, (int)result->ai_addrlen);
   // resultMessage("binding ", m_iResult);
 
   freeaddrinfo(result);
   result = nullptr;
 
-  m_iResult = listen(m_ServerSocket, SOMAXCONN);
+  mIResult = listen(mServerSocket, SOMAXCONN);
   // resultMessage("listening ", m_iResult);
   std::cout << "Listening on " << DEFAULT_PORT << std::endl;
   while (true) {
 
-    m_ClientSocket = accept(m_ServerSocket, NULL, NULL);
+    mClientSocket = accept(mServerSocket, NULL, NULL);
 
-    if (m_ClientSocket == INVALID_SOCKET) {
+    if (mClientSocket == INVALID_SOCKET) {
       continue;
     }
 
-    sendMessage(m_ClientSocket);
+    SendMessageSocket();
 
-    shutdown(m_ClientSocket, SD_SEND);
-    closesocket(m_ClientSocket);
+    shutdown(mClientSocket, SD_SEND);
+    closesocket(mClientSocket);
   }
 }
