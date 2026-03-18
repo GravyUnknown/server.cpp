@@ -1,5 +1,6 @@
 #include "Server.hpp"
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -23,10 +24,8 @@ std::string Server::ReadContents(const std::string &filename) {
   std::ifstream file(filename, std::ios::binary);
   if (!(file.is_open()))
     std::cerr << "File not found" << std::endl;
-  std::stringstream buffer;
-  buffer << file.rdbuf();
-  mBuffer = buffer.str();
-  return mBuffer;
+  return std::string((std::istreambuf_iterator<char>(file)),
+                     std::istreambuf_iterator<char>());
 }
 
 Server::ReturnStatus Server::ParseRequest(const std::string &recvBuf) {
