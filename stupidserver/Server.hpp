@@ -2,6 +2,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <istream>
@@ -31,19 +32,20 @@ private:
   int mIResult;
   int mBytesReceived;
   char mRecvBuf[DEFAULT_BUFLEN];
-  struct addrinfo *result = NULL;
+  struct addrinfo *serverResult = NULL;
   struct addrinfo hints;
   struct addrinfo *p;
-  enum class Status { ERR_BADREQUEST, ERR_INVALIDMETHOD, ERR_NOTFOUND, OK };
+  enum class Status { UNKNOWN, ERR_BADREQUEST, ERR_INVALIDMETHOD, ERR_NOTFOUND, OK };
   struct ReturnStatus {
-    Status returnCode;
-    std::string route;
+    Status returnCode = Status::UNKNOWN;
+    std::string route{};
   };
+  static std::string indexHTML, aboutHTML;
 
 public:
   ~Server();
   bool ResultMessage(const std::string &error, int result);
-  std::string ReadContents(const std::string &filename);
+  std::string ReadContents(const std::filesystem::path &filename);
   ReturnStatus ParseRequest(const std::string &recvBuf);
   int SendMessage();
   void InitializeWinsock();

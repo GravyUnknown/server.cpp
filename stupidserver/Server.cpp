@@ -20,7 +20,7 @@ bool Server::ResultMessage(const std::string &function, int result) {
 
 Server::~Server() { WSACleanup(); }
 
-std::string Server::ReadContents(const std::string &filename) {
+std::string Server::ReadContents(const std::filesystem::path &filename) {
   std::ifstream file(filename, std::ios::binary);
   if (!(file.is_open()))
     std::cerr << "File not found" << std::endl;
@@ -31,14 +31,14 @@ std::string Server::ReadContents(const std::string &filename) {
 Server::ReturnStatus Server::ParseRequest(const std::string &recvBuf) {
   std::istringstream buf(recvBuf);
   std::string method, route, version;
-  static std::map<std::string, std::string> routes{{"/", "index.html"},
-                                                   {"/about", "about.html"}};
+  static std::map<std::string, std::string> routes{ {"/", this->indexHTML},
+                                                   {"/about", this->aboutHTML} };
 
   if (!(buf >> method >> route >> version))
-    return {Status::ERR_BADREQUEST, ""};
+    return {Status::ERR_BADREQUEST, " "};
 
   if (method != "GET")
-    return {Status::ERR_INVALIDMETHOD, ""};
+    return {Status::ERR_INVALIDMETHOD, " "};
 
   return routes.contains(route)
              ? Server::ReturnStatus{Status::OK, routes[route]}
@@ -59,10 +59,10 @@ int Server::SendMessage() {
     if (fullRequest.find("\r\n\r\n") != std::string::npos) {
       break;
     }
-    std::cout << fullRequest << std::endl;
   }
+  std::cout << fullRequest << std::endl;
 
-  std::string body;
+  
   static const std::string &successHeader = "HTTP/1.1 200 OK\r\n"
                                             "CONTENT-TYPE: text/html \r\n"
                                             "Connection: close \r\n"
@@ -90,14 +90,14 @@ int Server::SendMessage() {
     mBuffer = err404;
     break;
   case Status::OK:
-    body = ReadContents(parsingResult.route);
+    std::string body = parsingResult.route;
     // m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" +
     // body;
     mBuffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" + body;
     break;
   }
 
-  send(mClientSocket, mBuffer.c_str(), mBuffer.size(), 0);
+  send(mClientSocket, mBuffer.c_str(), static_cast<int>(mBuffer.size()), 0);
   return 1;
 }
 
@@ -110,33 +110,34 @@ void Server::InitializeWinsock() {
 }
 
 void Server::SetupServer() {
-
+   static const std::filesystem::path currentPath = std::filesystem::relative("stupidserver");
+   indexHTML = ReadContents(currentPath / "index.html");
+   aboutHTML = ReadContents(currentPath / "about.html");
+   
   ZeroMemory(&hints, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = IPPROTO_TCP;
   hints.ai_flags = AI_PASSIVE;
 
-  mIResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
+  mIResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &serverResult);
   if (mIResult != 0) {
     std::cerr << "getaddrinfo failed: " << WSAGetLastError() << std::endl;
     return;
   }
 
   mServerSocket =
-      socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+      socket(serverResult->ai_family, serverResult->ai_socktype, serverResult->ai_protocol);
   if (mServerSocket == INVALID_SOCKET) {
     throw std::runtime_error("creating socket failed with " +
                              std::to_string(WSAGetLastError()));
-
-    freeaddrinfo(result);
   }
 
-  mIResult = bind(mServerSocket, result->ai_addr, (int)result->ai_addrlen);
+  mIResult = bind(mServerSocket, serverResult->ai_addr, (int)serverResult->ai_addrlen);
   // resultMessage("binding ", m_iResult);
 
-  freeaddrinfo(result);
-  result = nullptr;
+  freeaddrinfo(serverResult);
+  serverResult = nullptr;
 
   mIResult = listen(mServerSocket, SOMAXCONN);
   // resultMessage("listening ", m_iResult);
@@ -150,7 +151,6 @@ void Server::SetupServer() {
     }
 
     SendMessage();
-
     shutdown(mClientSocket, SD_SEND);
     closesocket(mClientSocket);
   }
