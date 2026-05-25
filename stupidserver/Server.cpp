@@ -5,6 +5,10 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 
+// Allocating memory for static members
+std::string Server::aboutHTML{};
+std::string Server::indexHTML{};
+
 bool Server::ResultMessage(const std::string &function, int result) {
   if (result == SOCKET_ERROR || result == INVALID_SOCKET) {
     const std::string errorMessage =
@@ -45,41 +49,27 @@ Server::ReturnStatus Server::ParseRequest(const std::string &recvBuf) {
              : Server::ReturnStatus{Status::ERR_NOTFOUND, " "};
 }
 
-int Server::SendMessage() {
-
-  std::string fullRequest;
-  fullRequest.reserve(1024);
-  Server::ReturnStatus parsingResult;
-  while (true) {
-    mBytesReceived = recv(mClientSocket, mRecvBuf, sizeof(mRecvBuf) - 1, 0);
-
-    mRecvBuf[mBytesReceived] = '\0';
-    fullRequest.append(mRecvBuf);
-
-    if (fullRequest.find("\r\n\r\n") != std::string::npos) {
-      break;
-    }
-  }
-  std::cout << fullRequest << std::endl;
+std::string Server::SendMessage(Server::ReturnStatus& presult) {
 
   
-  static const std::string &successHeader = "HTTP/1.1 200 OK\r\n"
+  
+  static const std::string_view successHeader = "HTTP/1.1 200 OK\r\n"
                                             "CONTENT-TYPE: text/html \r\n"
                                             "Connection: close \r\n"
                                             "CONTENT-LENGTH: ";
-  static const std::string &errInvalid =
+  static const std::string_view errInvalid =
       "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nError: "
       "Invalid format";
-  static const std::string &errMethod =
+  static const std::string_view errMethod =
       "HTTP/1.1 405 Method Not Allowed\r\nContent-Type: "
       "text/plain\r\n\r\nError: Use GET";
-  static const std::string &err404 = "HTTP/1.1 404 Not Found\r\n"
+  static const std::string_view err404 = "HTTP/1.1 404 Not Found\r\n"
                                      "CONTENT-TYPE:text/plain "
                                      "\r\n\r\n"
                                      "Error: Path not found";
-  parsingResult = ParseRequest(fullRequest);
+  
 
-  switch (parsingResult.returnCode) {
+  switch (presult.returnCode) {
   case Status::ERR_BADREQUEST:
     mBuffer = errInvalid;
     break;
@@ -90,15 +80,14 @@ int Server::SendMessage() {
     mBuffer = err404;
     break;
   case Status::OK:
-    std::string body = parsingResult.route;
+    std::string body = presult.route;
     // m_Buffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" +
     // body;
-    mBuffer = successHeader + std::to_string(body.size()) + "\r\n\r\n" + body;
+    mBuffer = std::string(successHeader) + std::to_string(body.size()) + "\r\n\r\n" + body;
     break;
   }
 
-  send(mClientSocket, mBuffer.c_str(), static_cast<int>(mBuffer.size()), 0);
-  return 1;
+  return mBuffer;
 }
 
 void Server::InitializeWinsock() {
@@ -120,7 +109,10 @@ void Server::SetupServer() {
   hints.ai_protocol = IPPROTO_TCP;
   hints.ai_flags = AI_PASSIVE;
 
-  mIResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &serverResult);
+  std::fill(std::begin(events), std::end(events), WSAPOLLFD{ 0 });
+
+
+  mIResult = getaddrinfo(NULL, DEFAULT_PORT.data(), &hints, &serverResult);
   if (mIResult != 0) {
     std::cerr << "getaddrinfo failed: " << WSAGetLastError() << std::endl;
     return;
@@ -129,29 +121,82 @@ void Server::SetupServer() {
   mServerSocket =
       socket(serverResult->ai_family, serverResult->ai_socktype, serverResult->ai_protocol);
   if (mServerSocket == INVALID_SOCKET) {
-    throw std::runtime_error("creating socket failed with " +
-                             std::to_string(WSAGetLastError()));
+    std::cerr << "creating socket failed with " <<
+                             WSAGetLastError();
   }
+
+  if (ioctlsocket(mServerSocket,
+      FIONBIO,
+      &uNonBlockingMode
+  ) != 0) ERR("ioctlsocket");
+
+
+
 
   mIResult = bind(mServerSocket, serverResult->ai_addr, (int)serverResult->ai_addrlen);
   // resultMessage("binding ", m_iResult);
 
   freeaddrinfo(serverResult);
-  serverResult = nullptr;
 
   mIResult = listen(mServerSocket, SOMAXCONN);
-  // resultMessage("listening ", m_iResult);
+  if (mIResult != 0) { ERR("listen"); }
+  events[0].fd = mServerSocket;
+  events[0].events = POLLIN;
+  int event_count = 1; // 1 because of the server socket
   std::cout << "Listening on " << DEFAULT_PORT << std::endl;
   while (true) {
 
-    mClientSocket = accept(mServerSocket, NULL, NULL);
+      int pollResult = WSAPoll(events, MAX_EVENTS + 1, 0);
+      if (pollResult) {
+          if (events[0].revents & POLLIN) {
+              mClientSocket = accept(mServerSocket, NULL, NULL);
+              if (mClientSocket == INVALID_SOCKET) {
+                  continue;
+              }
+              ioctlsocket(mClientSocket, FIONBIO, &uNonBlockingMode);
+              if (event_count < MAX_EVENTS + 1) {
+                  for (int i = 1; i < MAX_EVENTS; i++)
+                  {
+                      if (events[i].fd == 0 && events[i].events == 0)
+                      {
+                          events[i].fd = mClientSocket;
+                          events[i].events = POLLIN;
+                          event_count++;
+                          break;
+                      }
+                  }
+              }
+              else { send(mClientSocket, "Server full", sizeof("Server full"), 0); } // Sorry I couldn't bother
+          }
+          for (int i = 1; i <= MAX_EVENTS; i++)
+          {
+              if (events[i].fd != 0 && events[i].revents & POLLIN)
+              {
+                  mBytesReceived = recv(events[i].fd, mRecvBuf, DEFAULT_BUFLEN - 1, 0);
+                  mRecvBuf[DEFAULT_BUFLEN - 1] = '\0';
+                  std::string fullRequest{};
+                  fullRequest.append(mRecvBuf);
+                  if (fullRequest.find("\r\n\r\n") != std::string::npos)
+                  {
+                      Server::ReturnStatus parsingResult = ParseRequest(fullRequest);
+                      std::string buffer = SendMessage(parsingResult);
+                      if(send(events[i].fd, buffer.c_str(), buffer.size(), 0)==SOCKET_ERROR)ERR("send");
+                  }
+                  if (mBytesReceived == 0)
+                  {
+                      if (shutdown(events[i].fd, SD_SEND) != 0) ERR("shutdown");
+                      closesocket(events[i].fd);
+                      events[i].fd = 0;
+                      events[i].events = 0;
+                      event_count--;
+                  }
+                  
 
-    if (mClientSocket == INVALID_SOCKET) {
-      continue;
-    }
+              }
+          }
 
-    SendMessage();
-    shutdown(mClientSocket, SD_SEND);
-    closesocket(mClientSocket);
+
+          
+      }
   }
 }
