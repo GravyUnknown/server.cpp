@@ -1,10 +1,6 @@
 * ABOUT
 
 This is a simple server made in C++ using the default winsock library that comes with Windows
-This is my first project of C++ and to be fair, my first programming project itself 
-I think this project really helped me getting started with programming and 
-I feel motivated to do other projects as well
-But for now, only a server
 
 
 * BUILD
